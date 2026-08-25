@@ -1,0 +1,2 @@
+# wagecalc
+Hourly wage calculator
