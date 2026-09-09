@@ -6,6 +6,7 @@ import { calculateWage, durationMinutes, snapDateToInterval, timeOptions } from 
 type Theme = "device" | "light" | "dark";
 type TimeFormat = "device" | "12" | "24";
 type Interval = 5 | 10 | 15 | 30 | 60;
+type Employee = { id: string; name: string; rate: string; balance: string };
 
 type StoredState = {
   rate: string;
@@ -15,6 +16,8 @@ type StoredState = {
   timeFormat: TimeFormat;
   interval: Interval;
   theme: Theme;
+  employees: Employee[];
+  selectedEmployeeId: string;
 };
 
 const STORAGE_KEY = "wage-calculator:v1";
@@ -26,9 +29,16 @@ const DEFAULT_STATE: StoredState = {
   timeFormat: "device",
   interval: 15,
   theme: "device",
+  employees: [],
+  selectedEmployeeId: "",
 };
 
 const CURRENCIES = ["ILS", "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF"];
+
+function roundAmount(value: number, decimals: number) {
+  const factor = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
 
 function deviceCurrency() {
   const locale = navigator.language;
@@ -50,6 +60,7 @@ export default function WageCalculator() {
   const [state, setState] = useState<StoredState>(DEFAULT_STATE);
   const [ready, setReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [employeeEditor, setEmployeeEditor] = useState<Employee | "new" | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -75,9 +86,13 @@ export default function WageCalculator() {
   const currency = state.currency || (ready ? deviceCurrency() : "USD");
   const options = useMemo(() => timeOptions(state.interval), [state.interval]);
   const minutes = state.start && state.end ? durationMinutes(state.start, state.end) : null;
-  const rate = Number(state.rate);
+  const selectedEmployee = state.employees.find((employee) => employee.id === state.selectedEmployeeId);
+  const activeRate = selectedEmployee?.rate ?? state.rate;
+  const rate = Number(activeRate);
+  const balance = selectedEmployee ? Number(selectedEmployee.balance) || 0 : 0;
   const hasDurationError = Boolean(state.start && state.end && minutes === null);
-  const wage = minutes !== null && Number.isFinite(rate) && rate >= 0 ? calculateWage(rate, minutes) : null;
+  const wage = minutes !== null && activeRate !== "" && Number.isFinite(rate) && rate >= 0 ? calculateWage(rate, minutes) : null;
+  const total = wage === null ? null : wage + balance;
   const decimals = currency === "ILS" ? 0 : 2;
   // SSR and the browser's first render must use the same locale. Once mounted,
   // re-render with the actual device locale.
@@ -85,6 +100,10 @@ export default function WageCalculator() {
     style: "currency", currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals,
   });
   const is12Hour = state.timeFormat === "12" || (state.timeFormat === "device" && ready && usesTwelveHourClock());
+  const durationText = minutes !== null ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : "Set a start and end time";
+  const wageDetails = selectedEmployee && wage !== null && total !== null
+    ? `${durationText} · ${money.format(wage)} + ${money.format(balance)} = ${money.format(total)}`
+    : durationText;
 
   function update<K extends keyof StoredState>(key: K, value: StoredState[K]) {
     setState((current) => ({ ...current, [key]: value }));
@@ -96,6 +115,25 @@ export default function WageCalculator() {
 
   function clearTimes() {
     setState((current) => ({ ...current, start: "", end: "" }));
+  }
+
+  function updateEmployee(id: string, changes: Partial<Employee>) {
+    setState((current) => ({
+      ...current,
+      employees: current.employees.map((employee) => employee.id === id ? { ...employee, ...changes } : employee),
+    }));
+  }
+
+  function addWageToBalance() {
+    if (!selectedEmployee || wage === null) return;
+    setState((current) => ({
+      ...current,
+      start: "",
+      end: "",
+      employees: current.employees.map((employee) => employee.id === selectedEmployee.id
+        ? { ...employee, balance: String(roundAmount(balance + wage, decimals)) }
+        : employee),
+    }));
   }
 
   function displayTime(value: string) {
@@ -119,26 +157,40 @@ export default function WageCalculator() {
 
       <section className="hero" aria-live="polite">
         <p className="hero-label">Wage</p>
-        <div className={`wage ${wage === null || hasDurationError ? "muted" : ""}`}>
-          {wage !== null && !hasDurationError ? money.format(wage) : money.format(0)}
+        <div className={`wage ${total === null || hasDurationError ? "muted" : ""}`}>
+          {total !== null && !hasDurationError ? money.format(total) : money.format(0)}
         </div>
         <p className={`duration ${hasDurationError ? "error" : ""}`}>
           {hasDurationError
             ? "Shift must be 12 hours or less"
-            : minutes !== null
-              ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min`
-              : "Set a start and end time"}
+            : wageDetails}
         </p>
       </section>
 
       <section className="controls" aria-label="Wage details">
+        <div className="employee-row">
+          <label>
+            <span className="field-label">Employee</span>
+            <select value={state.selectedEmployeeId} onChange={(event) => update("selectedEmployeeId", event.target.value)}>
+              <option value="">None (manual rate)</option>
+              {state.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+            </select>
+          </label>
+          {selectedEmployee
+            ? <button className="text-button" onClick={() => setEmployeeEditor(selectedEmployee)}>Edit</button>
+            : <button className="text-button" onClick={() => setEmployeeEditor("new")}>Add employee</button>}
+        </div>
+
         <label className="rate-row">
           <span>Hourly rate</span>
           <span className="rate-input-wrap">
             <span>{money.formatToParts(0).find((part) => part.type === "currency")?.value}</span>
             <input
-              value={state.rate}
-              onChange={(event) => update("rate", event.target.value.replace(currency === "ILS" ? /\D/g : /[^\d.]/g, ""))}
+              value={activeRate}
+              onChange={(event) => {
+                const value = event.target.value.replace(currency === "ILS" ? /\D/g : /[^\d.]/g, "");
+                if (selectedEmployee) updateEmployee(selectedEmployee.id, { rate: value }); else update("rate", value);
+              }}
               inputMode={currency === "ILS" ? "numeric" : "decimal"}
               placeholder="0"
               aria-label={`Hourly rate in ${currency}`}
@@ -146,11 +198,53 @@ export default function WageCalculator() {
           </span>
         </label>
 
+        {selectedEmployee && (
+          <label className="balance-row">
+            <span>Balance</span>
+            <span className="balance-input-wrap">
+              <span>{money.formatToParts(0).find((part) => part.type === "currency")?.value}</span>
+              <BalanceInput
+                value={selectedEmployee.balance}
+                decimals={decimals}
+                onChange={(value) => updateEmployee(selectedEmployee.id, { balance: value })}
+                ariaLabel={`Balance for ${selectedEmployee.name} in ${currency}`}
+              />
+            </span>
+          </label>
+        )}
+
         <TimeRow label="Start time" value={state.start} displayValue={displayTime(state.start)} options={options} onChange={(value) => update("start", value)} onNow={() => setNow("start")} />
         <TimeRow label="End time" value={state.end} displayValue={displayTime(state.end)} options={options} onChange={(value) => update("end", value)} onNow={() => setNow("end")} />
       </section>
 
       <button className="clear-button" onClick={clearTimes} disabled={!state.start && !state.end}>Clear times</button>
+      {selectedEmployee && (
+        <button className="balance-button" onClick={addWageToBalance} disabled={wage === null || hasDurationError || wage === 0}>
+          Add wage to balance &amp; clear times
+        </button>
+      )}
+
+      {employeeEditor && (
+        <EmployeeSheet
+          employee={employeeEditor === "new" ? null : employeeEditor}
+          decimals={decimals}
+          onClose={() => setEmployeeEditor(null)}
+          onSave={(values) => {
+            if (employeeEditor === "new") {
+              const employee = { ...values, id: crypto.randomUUID() };
+              setState((current) => ({ ...current, employees: [...current.employees, employee], selectedEmployeeId: employee.id }));
+            } else {
+              updateEmployee(employeeEditor.id, values);
+            }
+            setEmployeeEditor(null);
+          }}
+          onDelete={employeeEditor === "new" ? undefined : () => {
+            if (!window.confirm(`Delete ${employeeEditor.name}?`)) return;
+            setState((current) => ({ ...current, employees: current.employees.filter((item) => item.id !== employeeEditor.id), selectedEmployeeId: "" }));
+            setEmployeeEditor(null);
+          }}
+        />
+      )}
 
       {settingsOpen && (
         <div className="sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>
@@ -178,6 +272,61 @@ export default function WageCalculator() {
         </div>
       )}
     </main>
+  );
+}
+
+function BalanceInput({ value, decimals, onChange, ariaLabel }: {
+  value: string;
+  decimals: number;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const rounded = roundAmount(Number(value) || 0, decimals).toFixed(decimals);
+
+  return (
+    <input
+      value={editing ? draft : rounded}
+      onFocus={() => { setDraft(value); setEditing(true); }}
+      onChange={(event) => setDraft(event.target.value.replace(/[^\d.-]/g, ""))}
+      onBlur={() => {
+        onChange(String(roundAmount(Number(draft) || 0, decimals)));
+        setEditing(false);
+      }}
+      inputMode="decimal"
+      aria-label={ariaLabel}
+    />
+  );
+}
+
+function EmployeeSheet({ employee, decimals, onClose, onSave, onDelete }: {
+  employee: Employee | null;
+  decimals: number;
+  onClose: () => void;
+  onSave: (employee: Omit<Employee, "id">) => void;
+  onDelete?: () => void;
+}) {
+  const [name, setName] = useState(employee?.name ?? "");
+  const [rate, setRate] = useState(employee?.rate ?? "");
+  const [balance, setBalance] = useState(employee ? roundAmount(Number(employee.balance) || 0, decimals).toFixed(decimals) : "0");
+  const canSave = name.trim() !== "" && rate !== "" && Number.isFinite(Number(rate)) && Number(rate) >= 0;
+
+  return (
+    <div className="sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="employee-title">
+        <div className="sheet-handle" />
+        <div className="sheet-header">
+          <h2 id="employee-title">{employee ? "Edit employee" : "Add employee"}</h2>
+          <button className="done-button" onClick={onClose}>Cancel</button>
+        </div>
+        <label className="editor-field"><span>Name</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
+        <label className="editor-field"><span>Hourly wage</span><input inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value.replace(/[^\d.]/g, ""))} /></label>
+        <label className="editor-field"><span>Balance</span><input inputMode="decimal" value={balance} onChange={(event) => setBalance(event.target.value.replace(/[^\d.-]/g, ""))} /></label>
+        <button className="primary-button" disabled={!canSave} onClick={() => onSave({ name: name.trim(), rate, balance: String(roundAmount(Number(balance) || 0, decimals)) })}>Save</button>
+        {onDelete && <button className="delete-button" onClick={onDelete}>Delete employee</button>}
+      </section>
+    </div>
   );
 }
 
