@@ -181,22 +181,21 @@ export default function WageCalculator() {
             : <button className="text-button" onClick={() => setEmployeeEditor("new")}>Add employee</button>}
         </div>
 
-        <label className="rate-row">
-          <span>Hourly rate</span>
-          <span className="rate-input-wrap">
-            <span>{money.formatToParts(0).find((part) => part.type === "currency")?.value}</span>
-            <input
-              value={activeRate}
-              onChange={(event) => {
-                const value = event.target.value.replace(currency === "ILS" ? /\D/g : /[^\d.]/g, "");
-                if (selectedEmployee) updateEmployee(selectedEmployee.id, { rate: value }); else update("rate", value);
-              }}
-              inputMode={currency === "ILS" ? "numeric" : "decimal"}
-              placeholder="0"
-              aria-label={`Hourly rate in ${currency}`}
-            />
-          </span>
-        </label>
+        {!selectedEmployee && (
+          <label className="rate-row">
+            <span>Hourly rate</span>
+            <span className="rate-input-wrap">
+              <span>{money.formatToParts(0).find((part) => part.type === "currency")?.value}</span>
+              <input
+                value={state.rate}
+                onChange={(event) => update("rate", event.target.value.replace(currency === "ILS" ? /\D/g : /[^\d.]/g, ""))}
+                inputMode={currency === "ILS" ? "numeric" : "decimal"}
+                placeholder="0"
+                aria-label={`Hourly rate in ${currency}`}
+              />
+            </span>
+          </label>
+        )}
 
         {selectedEmployee && (
           <label className="balance-row">
