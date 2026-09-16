@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { calculateWage, durationMinutes, snapDateToInterval, timeOptions } from "@/lib/calculator";
 
 type Theme = "device" | "light" | "dark";
@@ -101,8 +101,11 @@ export default function WageCalculator() {
   });
   const is12Hour = state.timeFormat === "12" || (state.timeFormat === "device" && ready && usesTwelveHourClock());
   const durationText = minutes !== null ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min` : "Set a start and end time";
+  const balanceOperation = balance < 0
+    ? `− ${money.format(Math.abs(balance))}`
+    : `+ ${money.format(balance)}`;
   const wageDetails = selectedEmployee && wage !== null && total !== null
-    ? `${durationText} · ${money.format(wage)} + ${money.format(balance)} = ${money.format(total)}`
+    ? `${durationText} · ${money.format(wage)} ${balanceOperation} = ${money.format(total)}`
     : durationText;
 
   function update<K extends keyof StoredState>(key: K, value: StoredState[K]) {
@@ -198,7 +201,7 @@ export default function WageCalculator() {
         )}
 
         {selectedEmployee && (
-          <label className="balance-row">
+          <div className="balance-row">
             <span>Balance</span>
             <span className="balance-input-wrap">
               <span>{money.formatToParts(0).find((part) => part.type === "currency")?.value}</span>
@@ -209,7 +212,7 @@ export default function WageCalculator() {
                 ariaLabel={`Balance for ${selectedEmployee.name} in ${currency}`}
               />
             </span>
-          </label>
+          </div>
         )}
 
         <TimeRow label="Start time" value={state.start} displayValue={displayTime(state.start)} options={options} onChange={(value) => update("start", value)} onNow={() => setNow("start")} />
@@ -282,20 +285,52 @@ function BalanceInput({ value, decimals, onChange, ariaLabel }: {
 }) {
   const [draft, setDraft] = useState(value);
   const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const keepDraftOnFocus = useRef(false);
   const rounded = roundAmount(Number(value) || 0, decimals).toFixed(decimals);
 
   return (
-    <input
-      value={editing ? draft : rounded}
-      onFocus={() => { setDraft(value); setEditing(true); }}
-      onChange={(event) => setDraft(event.target.value.replace(/[^\d.-]/g, ""))}
-      onBlur={() => {
-        onChange(String(roundAmount(Number(draft) || 0, decimals)));
-        setEditing(false);
-      }}
-      inputMode="decimal"
-      aria-label={ariaLabel}
-    />
+    <>
+      <input
+        ref={inputRef}
+        value={editing ? draft : rounded}
+        onFocus={() => {
+          if (keepDraftOnFocus.current) keepDraftOnFocus.current = false;
+          else setDraft(value);
+          setEditing(true);
+        }}
+        onChange={(event) => setDraft(event.target.value.replace(/[^\d.-]/g, ""))}
+        onBlur={() => {
+          onChange(String(roundAmount(Number(draft) || 0, decimals)));
+          setEditing(false);
+        }}
+        inputMode="decimal"
+        aria-label={ariaLabel}
+      />
+      <button
+        type="button"
+        className="balance-sign-button"
+        aria-label={(editing ? draft : value).startsWith("-") ? "Make balance positive" : "Make balance negative"}
+        title={(editing ? draft : value).startsWith("-") ? "Make positive" : "Make negative"}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={() => {
+          const current = editing ? draft : value;
+          const next = current.startsWith("-") ? current.slice(1) : Number(current) === 0 ? "-" : `-${current}`;
+          setDraft(next);
+          if (editing) return;
+          if (Number(value) === 0) {
+            keepDraftOnFocus.current = true;
+            setDraft("-");
+            setEditing(true);
+            inputRef.current?.focus();
+            return;
+          }
+          onChange(String(roundAmount(Number(next) || 0, decimals)));
+        }}
+      >
+        ±
+      </button>
+    </>
   );
 }
 
@@ -321,7 +356,22 @@ function EmployeeSheet({ employee, decimals, onClose, onSave, onDelete }: {
         </div>
         <label className="editor-field"><span>Name</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label className="editor-field"><span>Hourly wage</span><input inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value.replace(/[^\d.]/g, ""))} /></label>
-        <label className="editor-field"><span>Balance</span><input inputMode="decimal" value={balance} onChange={(event) => setBalance(event.target.value.replace(/[^\d.-]/g, ""))} /></label>
+        <div className="editor-field">
+          <span>Balance</span>
+          <span className="editor-balance-input">
+            <input aria-label="Balance" inputMode="decimal" value={balance} onChange={(event) => setBalance(event.target.value.replace(/[^\d.-]/g, ""))} />
+            <button
+              type="button"
+              className="balance-sign-button"
+              aria-label={balance.startsWith("-") ? "Make balance positive" : "Make balance negative"}
+              title={balance.startsWith("-") ? "Make positive" : "Make negative"}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => setBalance((current) => current.startsWith("-") ? current.slice(1) : Number(current) === 0 ? "-" : `-${current}`)}
+            >
+              ±
+            </button>
+          </span>
+        </div>
         <button className="primary-button" disabled={!canSave} onClick={() => onSave({ name: name.trim(), rate, balance: String(roundAmount(Number(balance) || 0, decimals)) })}>Save</button>
         {onDelete && <button className="delete-button" onClick={onDelete}>Delete employee</button>}
       </section>
