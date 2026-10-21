@@ -28,6 +28,10 @@ export function calculateWage(rate: number, minutes: number): number {
   return rate * (minutes / 60);
 }
 
+export function calculateTotal(wage: number, balance = 0, travelAllowance = 0): number {
+  return wage + balance + travelAllowance;
+}
+
 export function timeOptions(interval: number): string[] {
   return Array.from({ length: (24 * 60) / interval }, (_, index) => {
     const total = index * interval;

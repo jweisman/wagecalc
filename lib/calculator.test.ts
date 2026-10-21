@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateWage, durationMinutes, snapDateToInterval, timeOptions } from "./calculator";
+import { calculateTotal, calculateWage, durationMinutes, snapDateToInterval, timeOptions } from "./calculator";
 
 describe("calculator", () => {
   it("calculates same-day and overnight durations", () => {
@@ -20,5 +20,10 @@ describe("calculator", () => {
   it("builds constrained time options and calculates wages", () => {
     expect(timeOptions(30)).toHaveLength(48);
     expect(calculateWage(100, 90)).toBe(150);
+  });
+
+  it("adds an employee balance and travel allowance to the wage", () => {
+    expect(calculateTotal(150, -20, 30)).toBe(160);
+    expect(calculateTotal(150)).toBe(150);
   });
 });

@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { calculateWage, durationMinutes, snapDateToInterval, timeOptions } from "@/lib/calculator";
+import { calculateTotal, calculateWage, durationMinutes, snapDateToInterval, timeOptions } from "@/lib/calculator";
 
 type Theme = "device" | "light" | "dark";
 type TimeFormat = "device" | "12" | "24";
 type Interval = 5 | 10 | 15 | 30 | 60;
-type Employee = { id: string; name: string; rate: string; balance: string };
+type Employee = { id: string; name: string; rate: string; balance: string; travelAllowance?: string };
 
 type StoredState = {
   rate: string;
@@ -90,9 +90,10 @@ export default function WageCalculator() {
   const activeRate = selectedEmployee?.rate ?? state.rate;
   const rate = Number(activeRate);
   const balance = selectedEmployee ? Number(selectedEmployee.balance) || 0 : 0;
+  const travelAllowance = selectedEmployee ? Number(selectedEmployee.travelAllowance) || 0 : 0;
   const hasDurationError = Boolean(state.start && state.end && minutes === null);
   const wage = minutes !== null && activeRate !== "" && Number.isFinite(rate) && rate >= 0 ? calculateWage(rate, minutes) : null;
-  const total = wage === null ? null : wage + balance;
+  const total = wage === null ? null : calculateTotal(wage, balance, travelAllowance);
   const decimals = currency === "ILS" ? 0 : 2;
   // SSR and the browser's first render must use the same locale. Once mounted,
   // re-render with the actual device locale.
@@ -104,8 +105,9 @@ export default function WageCalculator() {
   const balanceOperation = balance < 0
     ? `− ${money.format(Math.abs(balance))}`
     : `+ ${money.format(balance)}`;
+  const travelOperation = travelAllowance > 0 ? ` + ${money.format(travelAllowance)} travel` : "";
   const wageDetails = selectedEmployee && wage !== null && total !== null
-    ? `${durationText} · ${money.format(wage)} ${balanceOperation} = ${money.format(total)}`
+    ? `${durationText} · ${money.format(wage)} ${balanceOperation}${travelOperation} = ${money.format(total)}`
     : durationText;
 
   function update<K extends keyof StoredState>(key: K, value: StoredState[K]) {
@@ -134,7 +136,7 @@ export default function WageCalculator() {
       start: "",
       end: "",
       employees: current.employees.map((employee) => employee.id === selectedEmployee.id
-        ? { ...employee, balance: String(roundAmount(balance + wage, decimals)) }
+        ? { ...employee, balance: String(roundAmount(balance + wage + travelAllowance, decimals)) }
         : employee),
     }));
   }
@@ -344,7 +346,9 @@ function EmployeeSheet({ employee, decimals, onClose, onSave, onDelete }: {
   const [name, setName] = useState(employee?.name ?? "");
   const [rate, setRate] = useState(employee?.rate ?? "");
   const [balance, setBalance] = useState(employee ? roundAmount(Number(employee.balance) || 0, decimals).toFixed(decimals) : "0");
-  const canSave = name.trim() !== "" && rate !== "" && Number.isFinite(Number(rate)) && Number(rate) >= 0;
+  const [travelAllowance, setTravelAllowance] = useState(employee?.travelAllowance ?? "");
+  const hasValidTravelAllowance = travelAllowance === "" || (Number.isFinite(Number(travelAllowance)) && Number(travelAllowance) >= 0);
+  const canSave = name.trim() !== "" && rate !== "" && Number.isFinite(Number(rate)) && Number(rate) >= 0 && hasValidTravelAllowance;
 
   return (
     <div className="sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -372,7 +376,28 @@ function EmployeeSheet({ employee, decimals, onClose, onSave, onDelete }: {
             </button>
           </span>
         </div>
-        <button className="primary-button" disabled={!canSave} onClick={() => onSave({ name: name.trim(), rate, balance: String(roundAmount(Number(balance) || 0, decimals)) })}>Save</button>
+        <div className="editor-field editor-field-last">
+          <span>Travel allowance</span>
+          <input
+            aria-label="Travel allowance"
+            inputMode="decimal"
+            placeholder="Optional"
+            value={travelAllowance}
+            onChange={(event) => setTravelAllowance(event.target.value.replace(/[^\d.]/g, ""))}
+          />
+        </div>
+        <button
+          className="primary-button"
+          disabled={!canSave}
+          onClick={() => onSave({
+            name: name.trim(),
+            rate,
+            balance: String(roundAmount(Number(balance) || 0, decimals)),
+            travelAllowance: travelAllowance === "" ? undefined : String(roundAmount(Number(travelAllowance), decimals)),
+          })}
+        >
+          Save
+        </button>
         {onDelete && <button className="delete-button" onClick={onDelete}>Delete employee</button>}
       </section>
     </div>

@@ -7,9 +7,9 @@ A mobile-first, offline-capable hourly wage calculator. Set an hourly rate and s
 - Calculate wages from an hourly rate and start/end times, including overnight shifts of up to 12 hours.
 - Set either time to the current time, rounded to the configured interval, or choose a time manually.
 - Use a separately persisted manual hourly rate or create and select saved employees.
-- Add, edit, and delete employees with individual hourly wages and positive or negative balances.
-- Include a selected employee's balance in the amount owed, with a clear breakdown of shift wage + balance = total.
-- Add the current shift wage to an employee's balance and clear the shift times in one action.
+- Add, edit, and delete employees with individual hourly wages, optional per-shift travel allowances, and positive or negative balances.
+- Include a selected employee's balance and travel allowance in the amount owed, with a clear breakdown of shift wage + balance + travel = total.
+- Add the current shift wage and travel allowance to an employee's balance and clear the shift times in one action.
 - Manually adjust employee balances using the same currency precision as displayed wages, with a ± control for entering overpayments on mobile keypads.
 - Choose the currency, 12- or 24-hour clock, time interval, and light, dark, or device theme.
 - Keep settings, employees, balances, and in-progress times locally on the device.

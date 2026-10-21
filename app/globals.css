@@ -66,7 +66,7 @@ h2 { margin: 0; font-size: 2rem; letter-spacing: -.035em; }
 .privacy-note { margin: 20px 12px 0; color: var(--secondary); font-size: .82rem; line-height: 1.45; }
 .editor-field { min-height: 70px; padding: 10px 16px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr minmax(0, 1.5fr); align-items: center; gap: 16px; background: var(--surface); }
 .editor-field:first-of-type { border-radius: 14px 14px 0 0; }
-.editor-field:nth-of-type(3) { border-bottom: 0; border-radius: 0 0 14px 14px; }
+.editor-field-last { border-bottom: 0; border-radius: 0 0 14px 14px; }
 .editor-field span { color: var(--secondary); font-size: .9rem; font-weight: 650; }
 .editor-field input { min-width: 0; border: 0; outline: 0; padding: 8px 0; color: var(--text); background: transparent; text-align: right; font-size: 1.2rem; }
 .editor-balance-input { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
